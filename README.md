@@ -1,10 +1,12 @@
 # clawd-tasks
 
-A task board for [Claude Code](https://claude.com/claude-code). When Claude makes a plan, the board lists its tasks and, under the task in progress, the steps Claude takes for it: each tool call, what it worked on, and how long it ran.
+A task board for [Claude Code](https://claude.com/claude-code). When Claude makes a plan, the board lists its tasks under the prompt and, under the task in progress, the steps Claude takes for it: each tool call, what it worked on, and how long it ran.
+
+With [clawd-statusbar](https://github.com/itsomidho/clawd-statusbar) installed, the board sits right above or below the bar, in a frame of the same width. Each plugin works on its own.
 
 ![The task board through one plan: four tasks, each tool call filed under the task in progress, a failed test run, then all four done](docs/board.gif)
 
-<sub>One plan, time-lapsed: Claude reads the auth flow with an agent's help, adds an endpoint across three files, writes tests (the first run fails and is fixed), then updates the README.</sub>
+<sub>One plan, time-lapsed: Claude reads the auth flow with an agent's help, adds an endpoint across three files, writes tests (the first run fails and is fixed), then updates the README. Once every task is done, the board folds to one line.</sub>
 
 ## What it shows
 
@@ -41,10 +43,10 @@ From a shell: `claude plugin install clawd-tasks --marketplace itsomidho/claude-
 
 | | |
 |---|---|
-| `/tasks` | open the board |
+| `/tasks` | hide or show the board (in a pane: open it) |
 | `/tasks export` | print the plan as Markdown and copy it to the clipboard, for an MR description |
 | `/tasks clear` | empty the board |
-| `/tasks close` | close the board |
+| `/tasks close` | hide the board (in a pane: close it) |
 
 `/clear` empties the board too.
 
@@ -54,13 +56,14 @@ Open `/plugin`, pick clawd-tasks, and set:
 
 | Setting | Default | |
 |---|---|---|
-| Open on a plan | on | open the board by itself when Claude writes a plan of two or more tasks, on a terminal 144 columns or wider |
+| Where | `prompt` | `prompt`: under the prompt, beside clawd-statusbar if you have it. `pane`: in a pane that docks beside the conversation in fullscreen |
+| Open the pane on a plan | on | with Where set to `pane`: open it by itself when Claude writes a plan of two or more tasks, on a terminal 144 columns or wider |
 
 ## How it works
 
 The plugin (`hooks/register.tsx`) watches each tool call as it runs. Calls to the plan tools (`TodoWrite`, `TaskCreate`, `TaskUpdate`) update the board's tasks; every other call becomes a step under the task most recently set in progress, timed from start to end, with its file and line counts for the edit tools and an agent count for `Agent`. The rules live in `hooks/board.ts` as plain functions, which the tests in `hooks/board.test.ts` cover.
 
-The board is kept in the session's state, so it survives a reload of the plugin; it is drawn in a pane, which a terminal docks beside the conversation in fullscreen and shows above the prompt otherwise. Nothing leaves your machine.
+The board is kept in the session's state, so it survives a reload of the plugin. Under the prompt it is drawn by a hook on the hint line there, in a frame sized as clawd-statusbar sizes its own; it lists up to six tasks (past that the done ones fold into one line) and the last three steps, so it stays short. A new plan shows it again if you hid it. Nothing leaves your machine.
 
 ## Development
 

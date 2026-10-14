@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { EMPTY, current, fromTodos, labelOf, stepEnded, stepStarted, toMarkdown, updated, created } from './board'
+import { EMPTY, created, current, fromTodos, labelOf, shownTasks, stepEnded, stepStarted, toMarkdown, updated } from './board'
 
 const ROOT = '/repo'
 const todos = (...status: ('pending' | 'in_progress' | 'completed')[]) =>
@@ -55,4 +55,17 @@ test('the export lists tasks with their files', async () => {
   expect(markdown).toContain('## Plan · 0/3 done · 1m 05s')
   expect(markdown).toContain('- [~] **Read the auth flow** — 1m 05s, 1 file +2 −0')
   expect(markdown).toContain('`x.md` +2 −0')
+})
+
+test('a long plan folds its done tasks and counts the rest', async () => {
+  let board = EMPTY
+  const todos = Array.from({ length: 9 }, (_, i) => ({
+    content: `Task ${i}`, activeForm: `Doing ${i}`, status: (i < 4 ? 'completed' : i === 4 ? 'in_progress' : 'pending') as never,
+  }))
+  board = fromTodos(board, todos, 0)
+  const shown = shownTasks(board, 5)
+  expect(shown.folded).toBe(4)
+  expect(shown.tasks.map(task => task.subject)).toEqual(['Task 4', 'Task 5', 'Task 6'])
+  expect(shown.more).toBe(2)
+  expect(shownTasks(board, 20).tasks.length).toBe(9)
 })

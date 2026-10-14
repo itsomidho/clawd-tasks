@@ -3,8 +3,8 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Step, Task } from '../types'
 import {
-  EMPTY, PLAN_TOOLS, changeOf, created, current, cut, duration, fromTodos, labelOf, progress,
-  shortTool, stepEnded, stepStarted, taskTime, toMarkdown, updated,
+  EMPTY, PLAN_TOOLS, changeOf, created, current, cut, duration, fromTodos, isFinished, labelOf, progress,
+  shortTool, shownTasks, stepEnded, stepStarted, taskTime, toMarkdown, updated,
 } from './board'
 
 const PANE = 'tasks'
@@ -12,17 +12,30 @@ const TITLE = 'Tasks'
 const COMMAND = 'tasks'
 // How often a running task's clock moves on the board.
 const TICK_MS = 1000
-// Steps shown under the task in progress: as many as the pane has room for,
-// within these.
-const MIN_STEPS = 3
-const MAX_STEPS = 12
 const TOOL_WIDTH = 6
+// In the pane: steps under the task in progress, as many as it has room for
+// within these.
+const PANE_MIN_STEPS = 3
+const PANE_MAX_STEPS = 12
+// Under the prompt the board shares the screen with the conversation: the
+// tasks it lists, and the steps under the one in progress.
+const PROMPT_TASKS = 6
+const PROMPT_STEPS = 3
+// The row under the prompt as clawd-statusbar sizes its frame: the engine's
+// two-column indent at the left and the room it keeps at the right, so the
+// two frames line up when both are installed.
+const INDENT = 2
+const TRAIL = 4
+const FRAME = 4
+const FALLBACK_COLUMNS = 80
 
 const board = atom({ plugin: 'clawd-tasks', key: 'board' } as const, EMPTY)
 const clock = atom({ plugin: 'clawd-tasks', key: 'now' } as const, 0)
+const hidden = atom({ plugin: 'clawd-tasks', key: 'isHidden' } as const, false)
 
-let config = { isAutoOpen: true }
-// The plan's size when last seen, so a new plan opens the board once.
+type Placement = 'prompt' | 'pane'
+let config: { placement: Placement; isAutoOpen: boolean } = { placement: 'prompt', isAutoOpen: true }
+// The plan's size when last seen, so a new plan opens the pane once.
 let seenTasks = 0
 let root = ''
 
@@ -33,7 +46,11 @@ async function now($: EngineInterface) {
 async function change($: EngineInterface, fn: (one: Board) => Board) {
   await update($, board, one => fn(one ?? EMPTY))
   const after = await read($, board)
-  if (config.isAutoOpen && seenTasks < 2 && after.tasks.length >= 2) void $.ui.open({ id: PANE, title: TITLE }).catch(() => {})
+  if (config.placement === 'pane' && config.isAutoOpen && seenTasks < 2 && after.tasks.length >= 2) {
+    void $.ui.open({ id: PANE, title: TITLE }).catch(() => {})
+  }
+  // A new plan shows under the prompt even if the last one was hidden.
+  if (config.placement === 'prompt' && seenTasks === 0 && after.tasks.length > 0) await update($, hidden, () => false)
   seenTasks = after.tasks.length
 }
 
@@ -69,13 +86,71 @@ function stepTime(step: Step, at: number) {
   return step.endedAt === undefined ? 'running…' : duration(step.endedAt - step.startedAt)
 }
 
+type Elements = { Box: any; Text: any }
+
+// The board's rows, for the pane and the frame under the prompt alike: the
+// header, the tasks, and the latest steps under the task in progress.
+function rows({ Box, Text }: Elements, one: Board, at: number, width: number, limits: { tasks: number; steps: number }) {
+  const { done, total } = progress(one)
+  const took = one.startedAt === undefined ? '' : ` · ${duration(at - one.startedAt)}`
+  const running = current(one)
+  const shown = shownTasks(one, limits.tasks)
+  const out = [
+    <Text key="head">
+      <Text bold>Plan</Text>
+      <Text dimColor>{` · ${done}/${total} done${took}`}</Text>
+    </Text>,
+  ]
+  if (shown.folded > 0) out.push(<Text key="folded" dimColor><Text color="green">✓ </Text>{`${shown.folded} done`}</Text>)
+  for (const task of shown.tasks) {
+    const info = facts(task, at)
+    const isRunning = task.id === running?.id
+    const steps = isRunning ? task.steps.slice(-limits.steps) : []
+    const earlier = isRunning ? task.dropped + task.steps.length - steps.length : 0
+    out.push(
+      <Box key={`t:${task.id}`} flexDirection="row">
+        <Text color={COLORS[task.status]}>{`${MARKS[task.status]} `}</Text>
+        <Box flexGrow={1} flexShrink={1}>
+          <Text bold={isRunning} dimColor={task.status === 'completed'} wrap="truncate-end">
+            {isRunning ? task.activeForm || task.subject : task.subject}
+          </Text>
+        </Box>
+        {info !== '' && <Text dimColor>{`  ${info}`}</Text>}
+      </Box>,
+    )
+    if (earlier > 0) out.push(<Text key={`e:${task.id}`} dimColor>{`   ┆ ${earlier} earlier`}</Text>)
+    steps.forEach((step, i) => {
+      const label = cut(step.label, Math.max(8, width - TOOL_WIDTH - 22))
+      out.push(
+        <Box key={`s:${step.id}`} flexDirection="row">
+          <Text dimColor>{`   ${i === steps.length - 1 ? '└' : '├'} `}</Text>
+          <Text color={step.isError ? 'red' : step.endedAt === undefined ? 'yellow' : undefined}>
+            {shortTool(step.tool).slice(0, TOOL_WIDTH).padEnd(TOOL_WIDTH)}
+          </Text>
+          <Box flexGrow={1} flexShrink={1}>
+            <Text dimColor={step.endedAt !== undefined} wrap="truncate-end">{` ${label}${step.agentId ? ' (agent)' : ''}`}</Text>
+          </Box>
+          <Text dimColor>{`  ${step.isError ? 'failed' : stepTime(step, at)}`}</Text>
+        </Box>,
+      )
+    })
+  }
+  if (shown.more > 0) out.push(<Text key="more" dimColor>{`○ ${shown.more} more`}</Text>)
+  if (one.loose > 0) out.push(<Text key="loose" dimColor>{`${one.loose} calls outside any task`}</Text>)
+
+  return out
+}
+
 export const register: Register = (on, options) => {
-  config = { isAutoOpen: options.autoOpen !== false }
+  config = {
+    placement: options.placement === 'pane' ? 'pane' : 'prompt',
+    isAutoOpen: options.autoOpen !== false,
+  }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: COMMAND,
-      description: 'Show the task board: the plan, and the steps under each task',
+      description: 'Show or hide the task board: the plan, and the steps under each task',
       argumentHint: '[export | clear | close]',
     })
     root = await $.session.root().catch(() => '')
@@ -139,22 +214,65 @@ export const register: Register = (on, options) => {
       return { text: 'Task board cleared.' }
     }
     if (word === 'close') {
-      await $.ui.close({ id: PANE })
-      return { text: 'Task board closed. /tasks opens it again.' }
+      if (config.placement === 'pane') await $.ui.close({ id: PANE })
+      else await update($, hidden, () => true)
+      return { text: 'Task board hidden. /tasks shows it again.' }
     }
     if (word !== '') return { text: `Unknown option "${word}". Use /tasks, /tasks export, /tasks clear or /tasks close.` }
 
-    const opened = await $.ui.open({ id: PANE, title: TITLE })
     const { done, total } = progress(await read($, board))
     const plan = total === 0 ? 'no plan yet' : `${done}/${total} done`
-    return { text: opened.isPlaced ? `Task board open (${plan}).` : `Task board: ${plan}. It opens when there is room for it.` }
-  }).catch(() => ({ text: 'The task board could not be opened; see the debug log.' }))
+    if (config.placement === 'pane') {
+      const opened = await $.ui.open({ id: PANE, title: TITLE })
+      return { text: opened.isPlaced ? `Task board open (${plan}).` : `Task board: ${plan}. It opens when there is room for it.` }
+    }
+    const isHidden = !(await read($, hidden))
+    await update($, hidden, () => isHidden)
+    if (isHidden) return { text: 'Task board hidden. /tasks shows it again.' }
+    return { text: total === 0 ? 'Task board on: it shows under the prompt once Claude makes a plan.' : `Task board shown (${plan}).` }
+  }).catch(() => ({ text: 'The task board could not be switched; see the debug log.' }))
+
+  // Under the prompt, in a frame the width of clawd-statusbar's: whichever of
+  // the two draws first, the board sits right above or right below the bar.
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    if (config.placement !== 'prompt') return next(e)
+    const [below, one, isHidden, ticked, clockNow] = await Promise.all([
+      next(e), read($, board), read($, hidden), read($, clock), now($),
+    ])
+    if (isHidden || one.tasks.length === 0) return below
+
+    const { Box, Text } = $.ui.resolve(e)
+    const at = Math.max(ticked, clockNow)
+    const width = (e.viewport?.columns ?? FALLBACK_COLUMNS) - INDENT - TRAIL
+    const frame = { borderStyle: 'round', borderDimColor: true, paddingX: 1, width } as const
+    if (isFinished(one)) {
+      // A finished plan keeps one line until the next plan or /tasks clear.
+      const { total } = progress(one)
+      const took = one.startedAt === undefined ? '' : ` · ${duration(at - one.startedAt)}`
+      return (
+        <Box flexDirection="column">
+          {below}
+          <Box {...frame}>
+            <Text><Text color="green">✓ </Text><Text bold>Plan done</Text><Text dimColor>{` · ${total}/${total}${took}`}</Text></Text>
+          </Box>
+        </Box>
+      )
+    }
+
+    return (
+      <Box flexDirection="column">
+        {below}
+        <Box {...frame} flexDirection="column">
+          {rows({ Box, Text }, one, at, width - FRAME, { tasks: PROMPT_TASKS, steps: PROMPT_STEPS })}
+        </Box>
+      </Box>
+    )
+  })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const [one, ticked, clockNow] = await Promise.all([read($, board), read($, clock), now($)])
     const at = Math.max(ticked, clockNow)
-    const width = Math.max(20, e.props.bodyColumns)
 
     if (one.tasks.length === 0) {
       return (
@@ -166,55 +284,11 @@ export const register: Register = (on, options) => {
       )
     }
 
-    const { done, total } = progress(one)
-    const took = one.startedAt === undefined ? '' : ` · ${duration(at - one.startedAt)}`
-    const running = current(one)
     const room = e.props.scroll.bodyRows - one.tasks.length - 3
-    const shown = Math.min(MAX_STEPS, Math.max(MIN_STEPS, room))
-
+    const steps = Math.min(PANE_MAX_STEPS, Math.max(PANE_MIN_STEPS, room))
     return (
       <Box flexDirection="column">
-        <Text>
-          <Text bold>Plan</Text>
-          <Text dimColor>{` · ${done}/${total} done${took}`}</Text>
-        </Text>
-        {one.tasks.map(task => {
-          const info = facts(task, at)
-          const isRunning = task.id === running?.id
-          const steps = isRunning ? task.steps.slice(-shown) : []
-          const hidden = isRunning ? task.dropped + task.steps.length - steps.length : 0
-          const subject = isRunning ? task.activeForm || task.subject : task.subject
-
-          return (
-            <Box key={`t:${task.id}`} flexDirection="column">
-              <Box flexDirection="row">
-                <Text color={COLORS[task.status]}>{`${MARKS[task.status]} `}</Text>
-                <Box flexGrow={1} flexShrink={1}>
-                  <Text bold={isRunning} dimColor={task.status === 'completed'} wrap="truncate-end">{subject}</Text>
-                </Box>
-                {info !== '' && <Text dimColor>{`  ${info}`}</Text>}
-              </Box>
-              {hidden > 0 && <Text dimColor>{`   ┆ ${hidden} earlier`}</Text>}
-              {steps.map((step, i) => {
-                const isLast = i === steps.length - 1
-                const label = cut(step.label, Math.max(8, width - TOOL_WIDTH - 22))
-                return (
-                  <Box key={`s:${step.id}`} flexDirection="row">
-                    <Text dimColor>{`   ${isLast ? '└' : '├'} `}</Text>
-                    <Text color={step.isError ? 'red' : step.endedAt === undefined ? 'yellow' : undefined}>
-                      {shortTool(step.tool).slice(0, TOOL_WIDTH).padEnd(TOOL_WIDTH)}
-                    </Text>
-                    <Box flexGrow={1} flexShrink={1}>
-                      <Text dimColor={step.endedAt !== undefined} wrap="truncate-end">{` ${label}${step.agentId ? ' (agent)' : ''}`}</Text>
-                    </Box>
-                    <Text dimColor>{`  ${step.isError ? 'failed' : stepTime(step, at)}`}</Text>
-                  </Box>
-                )
-              })}
-            </Box>
-          )
-        })}
-        {one.loose > 0 && <Text dimColor>{`${one.loose} calls outside any task`}</Text>}
+        {rows({ Box, Text }, one, at, Math.max(20, e.props.bodyColumns), { tasks: Number.MAX_SAFE_INTEGER, steps })}
       </Box>
     )
   })

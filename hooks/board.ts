@@ -235,3 +235,20 @@ export function toMarkdown(board: Board, now: number) {
 
   return out.join('\n')
 }
+
+// The tasks a short board shows: all of them while they fit; past that the
+// done ones fold into one line, then the rest in order, as many as fit, and
+// a count of those left out.
+export function shownTasks(board: Board, limit: number) {
+  if (board.tasks.length <= limit) return { tasks: board.tasks, folded: 0, more: 0 }
+  const open = board.tasks.filter(task => task.status !== 'completed')
+  const folded = board.tasks.length - open.length
+  const room = Math.max(1, limit - (folded > 0 ? 1 : 0) - 1)
+  const tasks = open.slice(0, room)
+
+  return { tasks, folded, more: open.length - tasks.length }
+}
+
+export function isFinished(board: Board) {
+  return board.tasks.length > 0 && board.tasks.every(task => task.status === 'completed')
+}

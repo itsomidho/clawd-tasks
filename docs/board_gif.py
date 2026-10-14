@@ -2,8 +2,9 @@
 
 Claude writes a plan of four tasks, then works through them: each tool call
 lands under the task in progress, the task's clock runs, and its files and
-agents add up. The rows follow the Pane hook in hooks/register.tsx: same
-marks, colours and columns. The long stretches are time-lapsed. Needs Pillow
+agents add up. The board sits under the prompt, as the PromptHint hook in
+hooks/register.tsx draws it: same marks, colours, columns and limits; once
+every task is done it folds to one line. The long stretches are time-lapsed. Needs Pillow
 and the DejaVu fonts (paths below are Debian/Ubuntu).
 
     python3 docs/board_gif.py docs/board.gif
@@ -29,11 +30,12 @@ asc, desc = mono.getmetrics()
 CW = round(mono.getlength("M"))
 CH = asc + desc
 
-BOX = 72              # the pane's width in cells
+BOX = 72              # the frame's width in cells, as on a 78-column terminal
 INNER = BOX - 4       # less border and padding
-ROWS = 12             # the pane's height, border included
+INDENT = 2            # the engine's indent under the prompt
+CANVAS = 15           # rows on screen: the prompt, its hint, the tallest board
 TOOL = 6
-STEPS = 4             # steps shown under the task in progress
+STEPS = 3             # steps shown under the task in progress
 PAD = 18
 
 MARKS = {"completed": ("✓", GREEN), "in_progress": ("▶", YELLOW), "pending": ("○", None)}
@@ -68,6 +70,9 @@ def lines(board, now):
     """The board's rows as [(text, colour, is_bold)] runs, as the Pane hook draws them."""
     tasks = board["tasks"]
     done = sum(1 for t in tasks if t["status"] == "completed")
+    if done == len(tasks):
+        return [[("✓ ", GREEN, False), ("Plan done", TEXT, True),
+                 (f" · {done}/{done} · {duration(now - board['started'])}", DIM, False)]]
     rows = [[("Plan", TEXT, True), (f" · {done}/{len(tasks)} done · {duration(now - board['started'])}", DIM, False)]]
     for task in tasks:
         mark, colour = MARKS[task["status"]]
@@ -114,16 +119,20 @@ def box(draw, ch, x, top, colour):
 
 
 def frame(board, now):
-    rows = [[(" Tasks ", DIM, False)]]
-    rows.append([("╭" + "─" * (BOX - 2) + "╮", BORDER, False)])
     body = lines(board, now)
-    for r in range(ROWS - 2):
-        line = body[r] if r < len(body) else []
+    working = any(t["status"] != "completed" for t in board["tasks"])
+    # The prompt between its rules, the hint line, then the board's frame.
+    rule = [("─" * (INDENT + BOX + 2), BORDER, False)]
+    rows = [rule, [("> ", TEXT, False)], rule,
+            [(" " * INDENT + ("esc to interrupt" if working else "? for shortcuts"), DIM, False)]]
+    rows.append([(" " * INDENT + "╭" + "─" * (BOX - 2) + "╮", BORDER, False)])
+    for line in body:
         used = sum(len(t) for t, _, _ in line)
-        rows.append([("│ ", BORDER, False)] + line + [(" " * (INNER - used), TEXT, False), (" │", BORDER, False)])
-    rows.append([("╰" + "─" * (BOX - 2) + "╯", BORDER, False)])
+        rows.append([(" " * INDENT + "│ ", BORDER, False)] + line
+                    + [(" " * (INNER - used), TEXT, False), (" │", BORDER, False)])
+    rows.append([(" " * INDENT + "╰" + "─" * (BOX - 2) + "╯", BORDER, False)])
 
-    img = Image.new("RGB", (BOX * CW + 2 * PAD, len(rows) * CH + 2 * PAD), BG)
+    img = Image.new("RGB", ((INDENT + BOX + 2) * CW + 2 * PAD, CANVAS * CH + 2 * PAD), BG)
     draw = ImageDraw.Draw(img)
     for r, line in enumerate(rows):
         col = 0

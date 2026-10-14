@@ -37,6 +37,6 @@ export type Board = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'clawd-tasks': { board: Board; now: number }
+    'clawd-tasks': { board: Board; now: number; isHidden: boolean }
   }
 }

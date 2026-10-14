@@ -1,6 +1,6 @@
 {
   "name": "clawd-tasks",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A live task board: Claude's plan, and under each task the steps it took, how long it ran, the files it changed and the agents it started",
   "author": {
     "name": "Omid Hosseini",
@@ -18,10 +18,20 @@
   ],
   "types": "./types/index.d.ts",
   "userConfig": {
+    "placement": {
+      "type": "string",
+      "title": "Where",
+      "description": "Where the board shows: under the prompt, beside clawd-statusbar if you have it (prompt), or in a pane that docks beside the conversation in fullscreen (pane).",
+      "options": [
+        "prompt",
+        "pane"
+      ],
+      "default": "prompt"
+    },
     "autoOpen": {
       "type": "boolean",
-      "title": "Open on a plan",
-      "description": "Open the board by itself when Claude writes a plan of two or more tasks (on a terminal 144 columns or wider).",
+      "title": "Open the pane on a plan",
+      "description": "With Where set to pane: open it by itself when Claude writes a plan of two or more tasks (on a terminal 144 columns or wider).",
       "default": true
     }
   }
