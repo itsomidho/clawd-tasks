@@ -169,6 +169,13 @@ export const register: Register = (on, options) => {
     const hasNative = tools.some(tool => NATIVE_TASK_TOOLS.includes(tool.name))
     await $.tool.register({ name: PLAN_TOOL, description: PLAN_DESCRIPTION, inputSchema: PLAN_SCHEMA, isDeferred: hasNative })
     seenTasks = (await read($, board)).tasks.length
+    // The engine keeps a plugin's panes open across reloads and updates: one an
+    // earlier version opened (0.1 drew the board in a pane) goes, now that the
+    // board is under the prompt.
+    if (config.placement === 'prompt') {
+      const panes = await $.ui.panes().catch(() => [])
+      if (panes.some(pane => pane.id === PANE)) await $.ui.close({ id: PANE }).catch(() => {})
+    }
     // A running task's clock moves on; nothing is written while none runs.
     $.clock.every(TICK_MS, () => {
       void (async () => {

@@ -74,3 +74,26 @@ test('the plan tool fills the board, and turns a bad plan away', async ($, on) =
   expect(await ui.find({ type: 'Text', text: /0\/2 done/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('a pane left open by an earlier version is closed when the board is under the prompt', async ($, on) => {
+  mock.clock(on, { now: 1_000 })
+  on('ui.render', { component: 'Pane' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>pane</Text>
+  })
+  // What 0.1 left behind: the board's pane, still open.
+  let closed = ''
+  on('ui.close', ($, e, next) => {
+    closed = e.id
+    return next(e)
+  })
+  on('ui.panes', () => ({ value: [{ id: 'tasks', title: 'Tasks', isShown: true, isFocused: false, isPlaced: true }] }))
+  // The rest of a session's start, as the engine answers it.
+  on('command.register', () => ({ value: { command: 'tasks' } }))
+  on('tool.list', () => ({ value: [] }))
+  on('tool.register', () => ({ value: { tool: 'mcp__clawd-tasks__plan' } }))
+  on('session.root', () => ({ value: '/repo' }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(closed).toBe('tasks')
+})

@@ -1,6 +1,6 @@
 {
   "name": "clawd-tasks",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A live task board: Claude's plan, and under each task the steps it took, how long it ran, the files it changed and the agents it started",
   "author": {
     "name": "Omid Hosseini",
