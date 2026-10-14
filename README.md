@@ -33,12 +33,12 @@ Line counts come from what Claude sent to the edit tools, so they are close, not
 In Claude Code, type:
 
 ```
-/plugin install clawd-tasks --marketplace itsomidho/clawd-statusbar
+/plugin install clawd-tasks --marketplace itsomidho/claude-plugins
 ```
 
-Answer `y` to add the marketplace if asked, then choose a scope. The `itsomidho` marketplace lives in the [clawd-statusbar](https://github.com/itsomidho/clawd-statusbar) repository and lists both plugins; each works on its own.
+Answer `y` to add the marketplace if asked, then choose a scope. The [`itsomidho` marketplace](https://github.com/itsomidho/claude-plugins) also lists [clawd-statusbar](https://github.com/itsomidho/clawd-statusbar); each plugin works on its own.
 
-From a shell: `claude plugin install clawd-tasks --marketplace itsomidho/clawd-statusbar`.
+From a shell: `claude plugin install clawd-tasks --marketplace itsomidho/claude-plugins`.
 
 ## Commands
 
