@@ -1,0 +1,28 @@
+{
+  "name": "clawd-tasks",
+  "version": "0.1.0",
+  "description": "A live task board: Claude's plan, and under each task the steps it took, how long it ran, the files it changed and the agents it started",
+  "author": {
+    "name": "Omid Hosseini",
+    "url": "https://github.com/itsomidho"
+  },
+  "homepage": "https://github.com/itsomidho/clawd-tasks",
+  "repository": "https://github.com/itsomidho/clawd-tasks",
+  "license": "MIT",
+  "keywords": [
+    "tasks",
+    "plan",
+    "todo",
+    "workflow",
+    "pane"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open on a plan",
+      "description": "Open the board by itself when Claude writes a plan of two or more tasks (on a terminal 144 columns or wider).",
+      "default": true
+    }
+  }
+}
