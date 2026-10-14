@@ -61,9 +61,29 @@ Open `/plugin`, pick clawd-tasks, and set:
 
 ## How it works
 
-The plugin (`hooks/register.tsx`) watches each tool call as it runs. Calls to the plan tools (`TodoWrite`, `TaskCreate`, `TaskUpdate`, and the plugin's own `mcp__clawd-tasks__plan`) update the board's tasks; every other call becomes a step under the task most recently set in progress, timed from start to end, with its file and line counts for the edit tools and an agent count for `Agent`. The rules live in `hooks/board.ts` as plain functions, which the tests in `hooks/board.test.ts` cover.
+The plugin (`hooks/register.tsx`) watches each tool call as it runs. Calls to the plan tools (`TodoWrite`, `TaskCreate`, `TaskUpdate`, and the plugin's own `mcp__clawd-tasks__plan`) update the board's tasks; every other call becomes a step under the task most recently set in progress, timed from start to end, with its file and line counts for the edit tools and an agent count for `Agent`. The rules live in `hooks/board.ts` as plain functions, which the tests in `hooks/board.test.ts` cover; `hooks/register.test.tsx` draws the board under the prompt and calls the plan tool.
 
 The board is kept in the session's state, so it survives a reload of the plugin. Under the prompt it is drawn by a hook on the hint line there, in a frame sized as clawd-statusbar sizes its own; it lists up to six tasks (past that the done ones fold into one line) and the last three steps, so it stays short. A new plan shows it again if you hid it. Nothing leaves your machine.
+
+## Troubleshooting
+
+**The board doesn't show.** It appears only once Claude makes a plan, so ask for work with a few steps ("make a plan and then …"). If it still doesn't show:
+
+- `/tasks` hides and shows it; you may have hidden it. A new plan shows it again too.
+- With Where set to `pane`, the board is in a pane: `/tasks` opens it.
+- After installing or updating, restart Claude Code. The plan tool, which Claude needs in a session without `TodoWrite` or `TaskCreate`, reaches Claude only once the plugin loads at a session's start.
+
+**`Host key verification failed` on install or update.** Claude Code fetched the plugin from GitHub over SSH, and this machine has no SSH key for GitHub. Either add one (`ssh-keygen -t ed25519`, add it to your GitHub account, then `ssh -T git@github.com` once to accept GitHub's host key), or have git use HTTPS for GitHub:
+
+```
+git config --global url."https://github.com/".insteadOf git@github.com:
+```
+
+Installing from a shell (`claude plugin install …`) also falls back to HTTPS by itself; updating does not.
+
+**`/tasks` is listed twice, or the board draws twice.** Two copies of the plugin are loaded, such as the installed one and a working copy started with `--plugin-dir`. Run one: start Claude Code without `--plugin-dir`, or disable the installed copy with `/plugin` while you work on yours.
+
+**The board is above the status bar, not below it (or the other way round).** The two plugins each add their frame under the prompt, and their order depends on which one Claude Code loads first; neither plugin can choose it.
 
 ## Development
 
