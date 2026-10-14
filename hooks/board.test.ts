@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { EMPTY, created, current, fromTodos, labelOf, shownTasks, stepEnded, stepStarted, toMarkdown, updated } from './board'
+import { EMPTY, created, current, fromTodos, labelOf, shownTasks, stepEnded, stepStarted, toMarkdown, todosFromPlan, updated } from './board'
 
 const ROOT = '/repo'
 const todos = (...status: ('pending' | 'in_progress' | 'completed')[]) =>
@@ -68,4 +68,16 @@ test('a long plan folds its done tasks and counts the rest', async () => {
   expect(shown.tasks.map(task => task.subject)).toEqual(['Task 4', 'Task 5', 'Task 6'])
   expect(shown.more).toBe(2)
   expect(shownTasks(board, 20).tasks.length).toBe(9)
+})
+
+test('the plan tool takes the whole list, and says what is wrong with a bad one', async () => {
+  const ok = todosFromPlan({ tasks: [{ subject: ' Ship it ', status: 'in_progress', activeForm: 'Shipping it' }, { subject: 'Tell people', status: 'pending' }] })
+  expect(ok).toEqual({ todos: [
+    { content: 'Ship it', status: 'in_progress', activeForm: 'Shipping it' },
+    { content: 'Tell people', status: 'pending', activeForm: undefined },
+  ] })
+  expect(todosFromPlan({})).toEqual({ error: '`tasks` must be a list of { subject, status }.' })
+  expect(todosFromPlan({ tasks: [{ subject: 'X', status: 'done' }] })).toEqual({
+    error: 'Task 1 ("X") needs a status of pending, in_progress or completed.',
+  })
 })

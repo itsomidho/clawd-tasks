@@ -252,3 +252,49 @@ export function shownTasks(board: Board, limit: number) {
 export function isFinished(board: Board) {
   return board.tasks.length > 0 && board.tasks.every(task => task.status === 'completed')
 }
+
+// The plugin's own planning tool, for sessions with no TodoWrite or TaskCreate:
+// the model sends the whole list each time, as with TodoWrite.
+export const PLAN_TOOL = 'plan'
+const STATUSES = new Set(['pending', 'in_progress', 'completed'])
+
+export const PLAN_SCHEMA = {
+  type: 'object',
+  properties: {
+    tasks: {
+      type: 'array',
+      description: 'The whole plan, in order. Send every task each time, not only the ones that changed.',
+      items: {
+        type: 'object',
+        properties: {
+          subject: { type: 'string', description: 'The task, in the imperative: "Add the refresh endpoint"' },
+          status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] },
+          activeForm: { type: 'string', description: 'The task as it runs: "Adding the refresh endpoint"' },
+        },
+        required: ['subject', 'status'],
+      },
+    },
+  },
+  required: ['tasks'],
+} as const
+
+type Todo = { content: string; status: TaskStatus; activeForm?: string }
+
+// The tool's input as TodoWrite's list, or why it cannot be one.
+export function todosFromPlan(input: unknown): { todos: Todo[] } | { error: string } {
+  const tasks = (input as { tasks?: unknown } | undefined)?.tasks
+  if (!Array.isArray(tasks)) return { error: '`tasks` must be a list of { subject, status }.' }
+  const todos: Todo[] = []
+  for (const [i, one] of tasks.entries()) {
+    const task = one as { subject?: unknown; status?: unknown; activeForm?: unknown }
+    const subject = typeof task.subject === 'string' ? task.subject.trim() : ''
+    if (subject === '') return { error: `Task ${i + 1} has no subject.` }
+    if (typeof task.status !== 'string' || !STATUSES.has(task.status)) {
+      return { error: `Task ${i + 1} ("${subject}") needs a status of pending, in_progress or completed.` }
+    }
+    const activeForm = typeof task.activeForm === 'string' && task.activeForm.trim() !== '' ? task.activeForm.trim() : undefined
+    todos.push({ content: subject, status: task.status as TaskStatus, activeForm })
+  }
+
+  return { todos }
+}

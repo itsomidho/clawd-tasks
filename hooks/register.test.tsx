@@ -48,3 +48,29 @@ test('the board shows under the prompt once there is a plan, and /tasks hides it
     await ui.unmount()
   }
 })
+
+test('the plan tool fills the board, and turns a bad plan away', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000 })
+  on('ui.render', { component: 'PromptHint' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text dimColor>{e.props.hint}</Text>
+  })
+
+  const ui = await $.ui.mount({ plugin: 'clawd-tasks', surface: 'terminal', ...HINT })
+  const bad = await $.tool.call({ tool: 'mcp__clawd-tasks__plan', tasks: [{ subject: 'X', status: 'done' }] })
+  expect(String(bad.result)).toContain('The plan was not changed')
+
+  const saved = await $.tool.call({
+    tool: 'mcp__clawd-tasks__plan',
+    tasks: [
+      { subject: 'Update the README', status: 'in_progress', activeForm: 'Updating the README' },
+      { subject: 'Check the links', status: 'pending' },
+    ],
+  })
+  await clock.advance(0)
+  expect(String(saved.result)).toBe('Plan saved: 0/2 done. It shows on the task board under the prompt.')
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: /Updating the README/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /0\/2 done/ })).toBeDefined()
+  await ui.unmount()
+})

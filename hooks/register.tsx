@@ -3,13 +3,24 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Step, Task } from '../types'
 import {
-  EMPTY, PLAN_TOOLS, changeOf, created, current, cut, duration, fromTodos, isFinished, labelOf, progress,
-  shortTool, shownTasks, stepEnded, stepStarted, taskTime, toMarkdown, updated,
+  EMPTY, PLAN_SCHEMA, PLAN_TOOL, PLAN_TOOLS, changeOf, created, current, cut, duration, fromTodos, isFinished,
+  labelOf, progress, shortTool, shownTasks, stepEnded, stepStarted, taskTime, todosFromPlan, toMarkdown, updated,
 } from './board'
 
 const PANE = 'tasks'
 const TITLE = 'Tasks'
 const COMMAND = 'tasks'
+const OWN_TOOL = 'mcp__clawd-tasks__plan'
+// The session's own task tools; with one of them, the plan tool waits behind
+// tool search so the model is not offered two ways to keep one plan.
+const NATIVE_TASK_TOOLS = ['TodoWrite', 'TaskCreate']
+const PLAN_DESCRIPTION = [
+  "Keeps the plan of the current work on the person's task board, under the prompt.",
+  'Use it for work of three or more steps: send the plan as you start, then again',
+  'each time a task starts (status in_progress, one at a time) or is done (completed).',
+  'Send the whole list every time, in order, not only the tasks that changed.',
+  'If you have TodoWrite or TaskCreate, use those instead: the board reads them too.',
+].join(' ')
 // How often a running task's clock moves on the board.
 const TICK_MS = 1000
 const TOOL_WIDTH = 6
@@ -154,6 +165,9 @@ export const register: Register = (on, options) => {
       argumentHint: '[export | clear | close]',
     })
     root = await $.session.root().catch(() => '')
+    const tools = await $.tool.list().catch(() => [])
+    const hasNative = tools.some(tool => NATIVE_TASK_TOOLS.includes(tool.name))
+    await $.tool.register({ name: PLAN_TOOL, description: PLAN_DESCRIPTION, inputSchema: PLAN_SCHEMA, isDeferred: hasNative })
     seenTasks = (await read($, board)).tasks.length
     // A running task's clock moves on; nothing is written while none runs.
     $.clock.every(TICK_MS, () => {
@@ -178,9 +192,20 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // The plugin's own plan tool: nothing beneath answers it, so this hook does.
+  on('tool.call', { tool: OWN_TOOL }, async ($, e) => {
+    const parsed = todosFromPlan(e)
+    if ('error' in parsed) return { result: `The plan was not changed: ${parsed.error}` }
+    const at = await now($)
+    await change($, one => fromTodos(one, parsed.todos, at))
+    const { done, total } = progress(await read($, board))
+    return { result: `Plan saved: ${done}/${total} done. It shows on the task board under the prompt.` }
+  }).catch(() => ({ result: 'The plan could not be saved; the task board is unchanged.' }))
+
   on('tool.call', async ($, e, next) => {
     const tool = String(e.tool)
     const args = e as unknown as Record<string, unknown>
+    if (tool === OWN_TOOL) return next(e)
     if (PLAN_TOOLS.has(tool)) {
       const ran = await next(e)
       if (ran.deny === undefined && ran.isError !== true) void planned($, tool, args, ran.result).catch(() => {})
