@@ -2,17 +2,9 @@
 
 A task board for [Claude Code](https://claude.com/claude-code). When Claude makes a plan, the board lists its tasks and, under the task in progress, the steps Claude takes for it: each tool call, what it worked on, and how long it ran.
 
-```
-Plan · 3/5 done · 12m 40s
-✓ Read the existing auth flow                 1m 20s
-✓ Add the token refresh endpoint              4m 05s  3f +48 −3
-▶ Writing tests for refresh                   2m 10s  1f +48 −0
-   ├ Read   tests/AuthTest.php                    0s
-   ├ Edit   tests/RefreshTest.php                 0s
-   └ Bash   Run the refresh tests           running…
-○ Update the README
-○ Run the full suite
-```
+![The task board through one plan: four tasks, each tool call filed under the task in progress, a failed test run, then all four done](docs/board.gif)
+
+<sub>One plan, time-lapsed: Claude reads the auth flow with an agent's help, adds an endpoint across three files, writes tests (the first run fails and is fixed), then updates the README.</sub>
 
 ## What it shows
 
@@ -27,6 +19,11 @@ Plan · 3/5 done · 12m 40s
 The plan comes from Claude's own task list (`TodoWrite`, or `TaskCreate` and `TaskUpdate`). Calls a subagent makes are filed under the task in progress too, marked `(agent)`. Calls made while no task is in progress are counted at the bottom.
 
 Line counts come from what Claude sent to the edit tools, so they are close, not a `git diff`.
+
+## Requirements
+
+- Claude Code with plugin hooks (built and tested on 2.1.300)
+- Nothing else: no scripts, no network, no tools to install
 
 ## Install
 
@@ -59,12 +56,20 @@ Open `/plugin`, pick clawd-tasks, and set:
 |---|---|---|
 | Open on a plan | on | open the board by itself when Claude writes a plan of two or more tasks, on a terminal 144 columns or wider |
 
+## How it works
+
+The plugin (`hooks/register.tsx`) watches each tool call as it runs. Calls to the plan tools (`TodoWrite`, `TaskCreate`, `TaskUpdate`) update the board's tasks; every other call becomes a step under the task most recently set in progress, timed from start to end, with its file and line counts for the edit tools and an agent count for `Agent`. The rules live in `hooks/board.ts` as plain functions, which the tests in `hooks/board.test.ts` cover.
+
+The board is kept in the session's state, so it survives a reload of the plugin; it is drawn in a pane, which a terminal docks beside the conversation in fullscreen and shows above the prompt otherwise. Nothing leaves your machine.
+
 ## Development
 
 ```
 claude plugin validate .
 claude plugin test .
 ```
+
+`docs/board.gif` is drawn by `python3 docs/board_gif.py docs/board.gif` (Pillow and the DejaVu fonts).
 
 To run your working copy instead of the installed one, start Claude Code with `claude --plugin-dir /path/to/clawd-tasks`; edits reload when a turn ends.
 
