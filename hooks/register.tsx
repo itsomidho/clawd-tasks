@@ -9,7 +9,7 @@ import {
 
 const PANE = 'tasks'
 const TITLE = 'Tasks'
-const COMMAND = 'tasks'
+const COMMAND = 'board'
 const OWN_TOOL = 'mcp__clawd-tasks__plan'
 // The session's own task tools; with one of them, the plan tool waits behind
 // tool search so the model is not offered two ways to keep one plan.
@@ -163,7 +163,7 @@ export const register: Register = (on, options) => {
       name: COMMAND,
       description: 'Show or hide the task board: the plan, and the steps under each task',
       argumentHint: '[export | clear | close]',
-    })
+    }).catch(() => {}) // a refused name must not cost the plan tool below (0.3 asked for the built-in /tasks)
     root = await $.session.root().catch(() => '')
     const tools = await $.tool.list().catch(() => [])
     const hasNative = tools.some(tool => NATIVE_TASK_TOOLS.includes(tool.name))
@@ -248,9 +248,9 @@ export const register: Register = (on, options) => {
     if (word === 'close') {
       if (config.placement === 'pane') await $.ui.close({ id: PANE })
       else await update($, hidden, () => true)
-      return { text: 'Task board hidden. /tasks shows it again.' }
+      return { text: 'Task board hidden. /board shows it again.' }
     }
-    if (word !== '') return { text: `Unknown option "${word}". Use /tasks, /tasks export, /tasks clear or /tasks close.` }
+    if (word !== '') return { text: `Unknown option "${word}". Use /board, /board export, /board clear or /board close.` }
 
     const { done, total } = progress(await read($, board))
     const plan = total === 0 ? 'no plan yet' : `${done}/${total} done`
@@ -260,7 +260,7 @@ export const register: Register = (on, options) => {
     }
     const isHidden = !(await read($, hidden))
     await update($, hidden, () => isHidden)
-    if (isHidden) return { text: 'Task board hidden. /tasks shows it again.' }
+    if (isHidden) return { text: 'Task board hidden. /board shows it again.' }
     return { text: total === 0 ? 'Task board on: it shows under the prompt once Claude makes a plan.' : `Task board shown (${plan}).` }
   }).catch(() => ({ text: 'The task board could not be switched; see the debug log.' }))
 
@@ -278,7 +278,7 @@ export const register: Register = (on, options) => {
     const width = (e.viewport?.columns ?? FALLBACK_COLUMNS) - INDENT - TRAIL
     const frame = { borderStyle: 'round', borderDimColor: true, paddingX: 1, width } as const
     if (isFinished(one)) {
-      // A finished plan keeps one line until the next plan or /tasks clear.
+      // A finished plan keeps one line until the next plan or /board clear.
       const { total } = progress(one)
       const took = one.startedAt === undefined ? '' : ` · ${duration(at - one.startedAt)}`
       return (

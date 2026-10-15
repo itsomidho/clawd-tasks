@@ -43,10 +43,10 @@ From a shell: `claude plugin install clawd-tasks --marketplace itsomidho/claude-
 
 | | |
 |---|---|
-| `/tasks` | hide or show the board (in a pane: open it) |
-| `/tasks export` | print the plan as Markdown and copy it to the clipboard, for an MR description |
-| `/tasks clear` | empty the board |
-| `/tasks close` | hide the board (in a pane: close it) |
+| `/board` | hide or show the board (in a pane: open it) |
+| `/board export` | print the plan as Markdown and copy it to the clipboard, for an MR description |
+| `/board clear` | empty the board |
+| `/board close` | hide the board (in a pane: close it) |
 
 `/clear` empties the board too.
 
@@ -69,9 +69,11 @@ The board is kept in the session's state, so it survives a reload of the plugin.
 
 **The board doesn't show.** It appears only once Claude makes a plan, so ask for work with a few steps ("make a plan and then …"). If it still doesn't show:
 
-- `/tasks` hides and shows it; you may have hidden it. A new plan shows it again too.
-- With Where set to `pane`, the board is in a pane: `/tasks` opens it.
+- `/board` hides and shows it; you may have hidden it. A new plan shows it again too.
+- With Where set to `pane`, the board is in a pane: `/board` opens it.
 - After installing or updating, restart Claude Code. The plan tool, which Claude needs in a session without `TodoWrite` or `TaskCreate`, reaches Claude only once the plugin loads at a session's start.
+
+**`/tasks` shows background tasks, not the board.** `/tasks` is Claude Code's own command. Since 0.4.0 the board's command is `/board`; 0.3 asked for `/tasks`, was refused, and in that refusal also lost the plan tool, so the board never filled. Update: `claude plugin update clawd-tasks@itsomidho`, then restart Claude Code.
 
 **`Host key verification failed` on install or update.** Claude Code fetched the plugin from GitHub over SSH, and this machine has no SSH key for GitHub. Either add one (`ssh-keygen -t ed25519`, add it to your GitHub account, then `ssh -T git@github.com` once to accept GitHub's host key), or have git use HTTPS for GitHub:
 
@@ -81,7 +83,7 @@ git config --global url."https://github.com/".insteadOf git@github.com:
 
 Installing from a shell (`claude plugin install …`) also falls back to HTTPS by itself; updating does not.
 
-**`/tasks` is listed twice, or the board draws twice.** Two copies of the plugin are loaded, such as the installed one and a working copy started with `--plugin-dir`. Run one: start Claude Code without `--plugin-dir`, or disable the installed copy with `/plugin` while you work on yours.
+**`/board` is listed twice, or the board draws twice.** Two copies of the plugin are loaded, such as the installed one and a working copy started with `--plugin-dir`. Run one: start Claude Code without `--plugin-dir`, or disable the installed copy with `/plugin` while you work on yours.
 
 **The board is above the status bar, not below it (or the other way round).** The two plugins each add their frame under the prompt, and their order depends on which one Claude Code loads first; neither plugin can choose it.
 

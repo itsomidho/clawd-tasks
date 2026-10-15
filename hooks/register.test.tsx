@@ -6,9 +6,9 @@ const HINT = {
   viewport: { columns: 100, rows: 40 },
 } as const
 
-// /tasks as the person types it at the prompt.
+// /board as the person types it at the prompt.
 const run = (args: string) => ({
-  command: 'tasks', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 },
+  command: 'board', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 },
 }) as const
 
 const PLAN = [
@@ -17,7 +17,7 @@ const PLAN = [
   { content: 'Write tests', activeForm: 'Writing tests', status: 'pending' },
 ] as const
 
-test('the board shows under the prompt once there is a plan, and /tasks hides it', async ($, on) => {
+test('the board shows under the prompt once there is a plan, and /board hides it', async ($, on) => {
   // The engine's side: every tool answers, and the hint line is a line of text.
   const clock = mock.clock(on, { now: 1_000 })
   on('tool.call', () => ({ result: {} }))
@@ -89,11 +89,28 @@ test('a pane left open by an earlier version is closed when the board is under t
   })
   on('ui.panes', () => ({ value: [{ id: 'tasks', title: 'Tasks', isShown: true, isFocused: false, isPlaced: true }] }))
   // The rest of a session's start, as the engine answers it.
-  on('command.register', () => ({ value: { command: 'tasks' } }))
+  on('command.register', () => ({ value: { command: 'board' } }))
   on('tool.list', () => ({ value: [] }))
   on('tool.register', () => ({ value: { tool: 'mcp__clawd-tasks__plan' } }))
   on('session.root', () => ({ value: '/repo' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   expect(closed).toBe('tasks')
+})
+
+test('the plan tool is registered even when the command name is refused', async ($, on) => {
+  mock.clock(on, { now: 1_000 })
+  // 0.3 asked for /tasks, which is built in: the refusal stopped the session's start.
+  on('command.register', () => { throw new Error('"/board" refused: it is built in') })
+  let registered = ''
+  on('tool.register', ($, e) => {
+    registered = e.name
+    return { value: { tool: `mcp__clawd-tasks__${e.name}` } }
+  })
+  on('tool.list', () => ({ value: [] }))
+  on('ui.panes', () => ({ value: [] }))
+  on('session.root', () => ({ value: '/repo' }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(registered).toBe('plan')
 })
