@@ -1,5 +1,7 @@
 # clawd-tasks
 
+[![Latest release](https://img.shields.io/github/v/release/itsomidho/clawd-tasks?label=release&color=7fbeb3)](https://github.com/itsomidho/clawd-tasks/releases)
+
 A task board for [Claude Code](https://claude.com/claude-code). When Claude makes a plan, the board lists its tasks under the prompt and, under the task in progress, the steps Claude takes for it: each tool call, what it worked on, and how long it ran.
 
 With [clawd-statusbar](https://github.com/itsomidho/clawd-statusbar) installed, the board sits right above or below the bar, in a frame of the same width. Each plugin works on its own.
