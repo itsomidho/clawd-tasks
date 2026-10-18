@@ -81,70 +81,79 @@ async function planned($: EngineInterface, tool: string, args: Record<string, un
   }
 }
 
-const COLORS = { completed: 'green', in_progress: 'yellow', pending: undefined } as const
-const MARKS = { completed: '✓', in_progress: '▶', pending: '○' } as const
-
-function facts(task: Task, at: number) {
-  const { files, added, removed } = changeOf(task)
-  return [
-    taskTime(task, at),
-    files > 0 ? `${files}f +${added} −${removed}` : '',
-    task.agents > 0 ? `${task.agents}ag` : '',
-  ].filter(one => one !== '').join('  ')
-}
+// Marks as clawd-git drew the plan: done, running, waiting.
+const STATUS = {
+  completed: { mark: '✓', color: 'green' },
+  in_progress: { mark: '●', color: 'yellow' },
+  pending: { mark: '○', color: 'gray' },
+} as const
 
 function stepTime(step: Step, at: number) {
-  return step.endedAt === undefined ? 'running…' : duration(step.endedAt - step.startedAt)
+  return step.endedAt === undefined ? 'running' : duration(step.endedAt - step.startedAt)
 }
 
 type Elements = { Box: any; Text: any }
 
 // The board's rows, for the pane and the frame under the prompt alike: the
-// header, the tasks, and the latest steps under the task in progress.
+// header, a progress bar, the tasks with their time and line counts on the
+// right, and the latest steps under the task in progress.
 function rows({ Box, Text }: Elements, one: Board, at: number, width: number, limits: { tasks: number; steps: number }) {
   const { done, total } = progress(one)
-  const took = one.startedAt === undefined ? '' : ` · ${duration(at - one.startedAt)}`
+  const took = one.startedAt === undefined ? '' : duration(at - one.startedAt)
   const running = current(one)
   const shown = shownTasks(one, limits.tasks)
+  const barWidth = Math.max(10, width)
+  const filled = total === 0 ? 0 : Math.round((done / total) * barWidth)
   const out = [
-    <Text key="head">
+    <Text key="head" wrap="truncate-end">
       <Text bold>Plan</Text>
-      <Text dimColor>{` · ${done}/${total} done${took}`}</Text>
+      <Text dimColor> · </Text>
+      <Text color={done === total ? 'green' : 'yellow'}>{`${done}/${total} done`}</Text>
+      {took !== '' && <Text dimColor>{` · ${took}`}</Text>}
+    </Text>,
+    <Text key="bar">
+      <Text color="green">{'━'.repeat(filled)}</Text>
+      <Text dimColor>{'━'.repeat(barWidth - filled)}</Text>
     </Text>,
   ]
   if (shown.folded > 0) out.push(<Text key="folded" dimColor><Text color="green">✓ </Text>{`${shown.folded} done`}</Text>)
   for (const task of shown.tasks) {
-    const info = facts(task, at)
+    const status = STATUS[task.status]
     const isRunning = task.id === running?.id
+    const { files, added, removed } = changeOf(task)
+    const time = taskTime(task, at)
     const steps = isRunning ? task.steps.slice(-limits.steps) : []
     const earlier = isRunning ? task.dropped + task.steps.length - steps.length : 0
     out.push(
       <Box key={`t:${task.id}`} flexDirection="row">
-        <Text color={COLORS[task.status]}>{`${MARKS[task.status]} `}</Text>
+        <Text color={status.color}>{`${status.mark} `}</Text>
         <Box flexGrow={1} flexShrink={1}>
-          <Text bold={isRunning} dimColor={task.status === 'completed'} wrap="truncate-end">
+          <Text bold={isRunning} color={task.status === 'completed' ? 'gray' : undefined} wrap="truncate-end">
             {isRunning ? task.activeForm || task.subject : task.subject}
           </Text>
         </Box>
-        {info !== '' && <Text dimColor>{`  ${info}`}</Text>}
+        {time !== '' && <Text color={isRunning ? 'yellow' : 'gray'}>{`  ${time}`}</Text>}
+        {files > 0 && <Text color="green">{`  +${added}`}</Text>}
+        {files > 0 && <Text color={removed > 0 ? 'red' : undefined} dimColor={removed === 0}>{` −${removed}`}</Text>}
+        {task.agents > 0 && <Text dimColor>{`  ${task.agents} agent${task.agents > 1 ? 's' : ''}`}</Text>}
       </Box>,
     )
-    if (earlier > 0) out.push(<Text key={`e:${task.id}`} dimColor>{`   ┆ ${earlier} earlier`}</Text>)
-    steps.forEach((step, i) => {
-      const label = cut(step.label, Math.max(8, width - TOOL_WIDTH - 22))
+    if (earlier > 0) out.push(<Text key={`e:${task.id}`} dimColor>{`  │ ${earlier} earlier steps`}</Text>)
+    for (const step of steps) {
+      const label = cut(step.label, Math.max(8, width - TOOL_WIDTH - 20))
       out.push(
         <Box key={`s:${step.id}`} flexDirection="row">
-          <Text dimColor>{`   ${i === steps.length - 1 ? '└' : '├'} `}</Text>
-          <Text color={step.isError ? 'red' : step.endedAt === undefined ? 'yellow' : undefined}>
+          <Text dimColor>{'  │ '}</Text>
+          <Text color={step.isError ? 'red' : step.endedAt === undefined ? 'yellow' : 'cyan'}>
             {shortTool(step.tool).slice(0, TOOL_WIDTH).padEnd(TOOL_WIDTH)}
           </Text>
           <Box flexGrow={1} flexShrink={1}>
-            <Text dimColor={step.endedAt !== undefined} wrap="truncate-end">{` ${label}${step.agentId ? ' (agent)' : ''}`}</Text>
+            <Text color={step.endedAt === undefined ? undefined : 'gray'} wrap="truncate-end">{` ${label}${step.agentId ? ' (agent)' : ''}`}</Text>
           </Box>
-          <Text dimColor>{`  ${step.isError ? 'failed' : stepTime(step, at)}`}</Text>
+          <Text color={step.isError ? 'red' : 'gray'}>{`  ${step.isError ? 'failed' : stepTime(step, at)}`}</Text>
         </Box>,
       )
-    })
+    }
   }
   if (shown.more > 0) out.push(<Text key="more" dimColor>{`○ ${shown.more} more`}</Text>)
   if (one.loose > 0) out.push(<Text key="loose" dimColor>{`${one.loose} calls outside any task`}</Text>)
@@ -273,24 +282,16 @@ export const register: Register = (on, options) => {
     ])
     if (isHidden || one.tasks.length === 0) return below
 
+    // A finished plan leaves the screen; the next plan brings the board back.
+    if (isFinished(one)) return below
+
     const { Box, Text } = $.ui.resolve(e)
     const at = Math.max(ticked, clockNow)
+    // Sized as clawd-statusbar sizes its frame: the text to the conversation's
+    // column, the frame itself stretched across the row (the footer spans the
+    // whole terminal while a pane is docked).
     const width = (e.viewport?.columns ?? FALLBACK_COLUMNS) - INDENT - TRAIL
-    const frame = { borderStyle: 'round', borderDimColor: true, paddingX: 1, width } as const
-    if (isFinished(one)) {
-      // A finished plan keeps one line until the next plan or /board clear.
-      const { total } = progress(one)
-      const took = one.startedAt === undefined ? '' : ` · ${duration(at - one.startedAt)}`
-      return (
-        <Box flexDirection="column">
-          {below}
-          <Box {...frame}>
-            <Text><Text color="green">✓ </Text><Text bold>Plan done</Text><Text dimColor>{` · ${total}/${total}${took}`}</Text></Text>
-          </Box>
-        </Box>
-      )
-    }
-
+    const frame = { borderStyle: 'round', borderDimColor: true, paddingX: 1 } as const
     return (
       <Box flexDirection="column">
         {below}

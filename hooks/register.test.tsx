@@ -114,3 +114,29 @@ test('the plan tool is registered even when the command name is refused', async 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   expect(registered).toBe('plan')
 })
+
+test('the board draws the plan with a bar and marks, and leaves once it is done', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000 })
+  on('tool.call', () => ({ result: {} }))
+  on('ui.render', { component: 'PromptHint' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text dimColor>{e.props.hint}</Text>
+  })
+  const ui = await $.ui.mount({ plugin: 'clawd-tasks', surface: 'terminal', ...HINT })
+  await $.tool.call({ tool: 'TodoWrite', todos: PLAN.map(one => ({ ...one })) })
+  await clock.advance(0)
+  await ui.redraw()
+  // The bar, the running task's dot, the done task's tick.
+  expect(await ui.find({ type: 'Text', text: /━/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /●/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✓/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /▶/ })).toBeUndefined()
+
+  // Every task done: the board is gone, the hint line stays.
+  await $.tool.call({ tool: 'TodoWrite', todos: PLAN.map(one => ({ ...one, status: 'completed' })) })
+  await clock.advance(0)
+  await ui.redraw()
+  expect(await ui.find({ type: 'Text', text: /Plan/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /esc to interrupt/ })).toBeDefined()
+  await ui.unmount()
+})

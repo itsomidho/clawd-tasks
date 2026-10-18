@@ -6,17 +6,20 @@ With [clawd-statusbar](https://github.com/itsomidho/clawd-statusbar) installed, 
 
 ![The task board through one plan: four tasks, each tool call filed under the task in progress, a failed test run, then all four done](docs/board.gif)
 
-<sub>One plan, time-lapsed: Claude reads the auth flow with an agent's help, adds an endpoint across three files, writes tests (the first run fails and is fixed), then updates the README. Once every task is done, the board folds to one line.</sub>
+<sub>One plan, time-lapsed: Claude reads the auth flow with an agent's help, adds an endpoint across three files, writes tests (the first run fails and is fixed), then updates the README. Once every task is done, the board leaves the screen.</sub>
 
 ## What it shows
 
 | | |
 |---|---|
-| `✓` `▶` `○` | done, in progress, not started |
+| `Plan · 2/4 done · 1m 16s` and a bar | how far the plan is, and how long it has run |
+| `✓` `●` `○` | done, in progress, not started |
 | `4m 05s` | how long the task took, or has taken so far |
-| `3f +48 −3` | files the task changed, and lines added and removed |
-| `2ag` | agents the task started |
-| `├ Read tests/AuthTest.php` | the steps of the task in progress: the tool and what it worked on; red when it failed |
+| `+48 −3` | lines the task added and removed |
+| `2 agents` | agents the task started |
+| `│ Read tests/AuthTest.php` | the steps of the task in progress: the tool and what it worked on; red when it failed |
+
+When every task is done the board leaves the screen; the next plan brings it back.
 
 The plan comes from Claude's own task list (`TodoWrite`, or `TaskCreate` and `TaskUpdate`). In a session that has neither, the plugin gives Claude a tool of its own, `plan`, to keep the plan on the board; where they exist, that tool waits behind tool search so Claude is not offered two ways to do one thing. Calls a subagent makes are filed under the task in progress too, marked `(agent)`. Calls made while no task is in progress are counted at the bottom.
 
@@ -63,7 +66,7 @@ Open `/plugin`, pick clawd-tasks, and set:
 
 The plugin (`hooks/register.tsx`) watches each tool call as it runs. Calls to the plan tools (`TodoWrite`, `TaskCreate`, `TaskUpdate`, and the plugin's own `mcp__clawd-tasks__plan`) update the board's tasks; every other call becomes a step under the task most recently set in progress, timed from start to end, with its file and line counts for the edit tools and an agent count for `Agent`. The rules live in `hooks/board.ts` as plain functions, which the tests in `hooks/board.test.ts` cover; `hooks/register.test.tsx` draws the board under the prompt and calls the plan tool.
 
-The board is kept in the session's state, so it survives a reload of the plugin. Under the prompt it is drawn by a hook on the hint line there, in a frame sized as clawd-statusbar sizes its own; it lists up to six tasks (past that the done ones fold into one line) and the last three steps, so it stays short. A new plan shows it again if you hid it. Nothing leaves your machine.
+The board is kept in the session's state, so it survives a reload of the plugin. Under the prompt it is drawn by a hook on the hint line there, in a frame sized as clawd-statusbar sizes its own; it lists up to six tasks (past that the done ones fold into one line) and the last three steps, so it stays short. A new plan shows it again if you hid it, and a finished plan takes it away. Nothing leaves your machine.
 
 ## Troubleshooting
 

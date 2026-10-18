@@ -4,7 +4,7 @@ Claude writes a plan of four tasks, then works through them: each tool call
 lands under the task in progress, the task's clock runs, and its files and
 agents add up. The board sits under the prompt, as the PromptHint hook in
 hooks/register.tsx draws it: same marks, colours, columns and limits; once
-every task is done it folds to one line. The long stretches are time-lapsed. Needs Pillow
+every task is done it leaves the screen. The long stretches are time-lapsed. Needs Pillow
 and the DejaVu fonts (paths below are Debian/Ubuntu).
 
     python3 docs/board_gif.py docs/board.gif
@@ -23,6 +23,7 @@ BORDER = (90, 90, 98)
 YELLOW = (229, 192, 123)
 GREEN = (120, 200, 120)
 RED = (224, 108, 117)
+CYAN = (127, 190, 179)
 
 mono = ImageFont.truetype(MONO, SIZE)
 bold = ImageFont.truetype(MONO.replace("SansMono.ttf", "SansMono-Bold.ttf"), SIZE)
@@ -33,12 +34,12 @@ CH = asc + desc
 BOX = 72              # the frame's width in cells, as on a 78-column terminal
 INNER = BOX - 4       # less border and padding
 INDENT = 2            # the engine's indent under the prompt
-CANVAS = 15           # rows on screen: the prompt, its hint, the tallest board
+CANVAS = 16           # rows on screen: the prompt, its hint, the tallest board
 TOOL = 6
 STEPS = 3             # steps shown under the task in progress
 PAD = 18
 
-MARKS = {"completed": ("✓", GREEN), "in_progress": ("▶", YELLOW), "pending": ("○", None)}
+MARKS = {"completed": ("✓", GREEN), "in_progress": ("●", YELLOW), "pending": ("○", DIM)}
 
 
 def duration(s):
@@ -53,53 +54,58 @@ def cut(text, width):
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
-def task_facts(task, now):
+def right(runs):
+    return sum(len(t) for t, _, _ in runs)
+
+
+def task_figures(task, now, running):
+    """The task's time, line counts and agents, right of its subject."""
     out = []
     if task["started"] is not None:
-        out.append(duration((task["ended"] if task["ended"] is not None else now) - task["started"]))
+        out.append((f"  {duration((task['ended'] if task['ended'] is not None else now) - task['started'])}",
+                    YELLOW if running else DIM, False))
     if task["files"]:
         added = sum(a for a, _ in task["files"].values())
         removed = sum(r for _, r in task["files"].values())
-        out.append(f"{len(task['files'])}f +{added} −{removed}")
+        out += [(f"  +{added}", GREEN, False), (f" −{removed}", RED if removed else DIM, False)]
     if task["agents"]:
-        out.append(f"{task['agents']}ag")
-    return "  ".join(out)
+        out.append((f"  {task['agents']} agent{'s' if task['agents'] > 1 else ''}", DIM, False))
+    return out
 
 
 def lines(board, now):
-    """The board's rows as [(text, colour, is_bold)] runs, as the Pane hook draws them."""
+    """The board's rows as [(text, colour, is_bold)] runs, as the PromptHint hook draws them."""
     tasks = board["tasks"]
     done = sum(1 for t in tasks if t["status"] == "completed")
-    if done == len(tasks):
-        return [[("✓ ", GREEN, False), ("Plan done", TEXT, True),
-                 (f" · {done}/{done} · {duration(now - board['started'])}", DIM, False)]]
-    rows = [[("Plan", TEXT, True), (f" · {done}/{len(tasks)} done · {duration(now - board['started'])}", DIM, False)]]
+    filled = round(done / len(tasks) * INNER)
+    rows = [
+        [("Plan", TEXT, True), (" · ", DIM, False), (f"{done}/{len(tasks)} done", GREEN if done == len(tasks) else YELLOW, False),
+         (f" · {duration(now - board['started'])}", DIM, False)],
+        [("━" * filled, GREEN, False), ("━" * (INNER - filled), DIM, False)],
+    ]
     for task in tasks:
         mark, colour = MARKS[task["status"]]
         running = task["status"] == "in_progress"
-        facts = task_facts(task, now)
-        facts = f"  {facts}" if facts else ""
+        figures = task_figures(task, now, running)
         subject = task["active"] if running else task["subject"]
-        room = INNER - 2 - len(facts)
+        room = INNER - 2 - right(figures)
         rows.append([(mark + " ", colour, False),
-                     (cut(subject, room).ljust(room), DIM if task["status"] == "completed" else TEXT, running),
-                     (facts, DIM, False)])
+                     (cut(subject, room).ljust(room), DIM if task["status"] == "completed" else TEXT, running)] + figures)
         if not running:
             continue
         steps = task["steps"][-STEPS:]
         hidden = len(task["steps"]) - len(steps)
         if hidden:
-            rows.append([(f"   ┆ {hidden} earlier", DIM, False)])
-        for i, step in enumerate(steps):
+            rows.append([(f"  │ {hidden} earlier steps", DIM, False)])
+        for step in steps:
             tool, label, started, ended, failed = step
-            time = "failed" if failed else "running…" if ended is None else duration(ended - started)
+            time = "failed" if failed else "running" if ended is None else duration(ended - started)
             time = f"  {time}"
-            branch = "└" if i == len(steps) - 1 else "├"
-            room = INNER - 5 - TOOL - 1 - len(time)
-            colour = RED if failed else YELLOW if ended is None else TEXT
-            rows.append([(f"   {branch} ", DIM, False), (tool[:TOOL].ljust(TOOL), colour, False),
+            room = INNER - 4 - TOOL - len(time)
+            colour = RED if failed else YELLOW if ended is None else CYAN
+            rows.append([("  │ ", DIM, False), (tool[:TOOL].ljust(TOOL), colour, False),
                          ((" " + cut(label, room - 1)).ljust(room), DIM if ended is not None else TEXT, False),
-                         (time, DIM, False)])
+                         (time, RED if failed else DIM, False)])
     return rows
 
 
@@ -119,18 +125,20 @@ def box(draw, ch, x, top, colour):
 
 
 def frame(board, now):
-    body = lines(board, now)
     working = any(t["status"] != "completed" for t in board["tasks"])
+    # A finished plan leaves the screen: only the prompt and its hint remain.
+    body = lines(board, now) if working else []
     # The prompt between its rules, the hint line, then the board's frame.
     rule = [("─" * (INDENT + BOX + 2), BORDER, False)]
     rows = [rule, [("> ", TEXT, False)], rule,
             [(" " * INDENT + ("esc to interrupt" if working else "? for shortcuts"), DIM, False)]]
-    rows.append([(" " * INDENT + "╭" + "─" * (BOX - 2) + "╮", BORDER, False)])
-    for line in body:
-        used = sum(len(t) for t, _, _ in line)
-        rows.append([(" " * INDENT + "│ ", BORDER, False)] + line
-                    + [(" " * (INNER - used), TEXT, False), (" │", BORDER, False)])
-    rows.append([(" " * INDENT + "╰" + "─" * (BOX - 2) + "╯", BORDER, False)])
+    if body:
+        rows.append([(" " * INDENT + "╭" + "─" * (BOX - 2) + "╮", BORDER, False)])
+        for line in body:
+            used = sum(len(t) for t, _, _ in line)
+            rows.append([(" " * INDENT + "│ ", BORDER, False)] + line
+                        + [(" " * (INNER - used), TEXT, False), (" │", BORDER, False)])
+        rows.append([(" " * INDENT + "╰" + "─" * (BOX - 2) + "╯", BORDER, False)])
 
     img = Image.new("RGB", ((INDENT + BOX + 2) * CW + 2 * PAD, CANVAS * CH + 2 * PAD), BG)
     draw = ImageDraw.Draw(img)
