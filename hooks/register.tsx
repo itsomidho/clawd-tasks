@@ -168,23 +168,28 @@ export const register: Register = (on, options) => {
   }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: COMMAND,
-      description: 'Show or hide the task board: the plan, and the steps under each task',
-      argumentHint: '[export | clear | close]',
-    }).catch(() => {}) // a refused name must not cost the plan tool below (0.3 asked for the built-in /tasks)
     root = await $.session.root().catch(() => '')
-    const tools = await $.tool.list().catch(() => [])
-    const hasNative = tools.some(tool => NATIVE_TASK_TOOLS.includes(tool.name))
-    await $.tool.register({ name: PLAN_TOOL, description: PLAN_DESCRIPTION, inputSchema: PLAN_SCHEMA, isDeferred: hasNative })
     seenTasks = (await read($, board)).tasks.length
-    // The engine keeps a plugin's panes open across reloads and updates: one an
-    // earlier version opened (0.1 drew the board in a pane) goes, now that the
-    // board is under the prompt.
-    if (config.placement === 'prompt') {
-      const panes = await $.ui.panes().catch(() => [])
-      if (panes.some(pane => pane.id === PANE)) await $.ui.close({ id: PANE }).catch(() => {})
-    }
+    // Registered without holding the session's start: awaiting them cost every
+    // session a few tenths of a second to open, and they are in place before
+    // the first prompt.
+    void (async () => {
+      await $.command.register({
+        name: COMMAND,
+        description: 'Show or hide the task board: the plan, and the steps under each task',
+        argumentHint: '[export | clear | close]',
+      }).catch(() => {}) // a refused name must not cost the plan tool below (0.3 asked for the built-in /tasks)
+      const tools = await $.tool.list().catch(() => [])
+      const hasNative = tools.some(tool => NATIVE_TASK_TOOLS.includes(tool.name))
+      await $.tool.register({ name: PLAN_TOOL, description: PLAN_DESCRIPTION, inputSchema: PLAN_SCHEMA, isDeferred: hasNative })
+      // The engine keeps a plugin's panes open across reloads and updates: one an
+      // earlier version opened (0.1 drew the board in a pane) goes, now that the
+      // board is under the prompt.
+      if (config.placement === 'prompt') {
+        const panes = await $.ui.panes().catch(() => [])
+        if (panes.some(pane => pane.id === PANE)) await $.ui.close({ id: PANE }).catch(() => {})
+      }
+    })().catch(error => $.ui.log(`registering /board and the plan tool failed: ${String(error)}`, { to: 'debug' }))
     // A running task's clock moves on; nothing is written while none runs.
     $.clock.every(TICK_MS, () => {
       void (async () => {

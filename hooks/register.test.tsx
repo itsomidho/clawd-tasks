@@ -75,6 +75,12 @@ test('the plan tool fills the board, and turns a bad plan away', async ($, on) =
   await ui.unmount()
 })
 
+// The session's start registers and tidies in the background: wait (a
+// second at most) for what a test checks to land.
+async function until(isDone: () => boolean) {
+  for (let i = 0; i < 200 && !isDone(); i++) await new Promise(resolve => setTimeout(resolve, 5))
+}
+
 test('a pane left open by an earlier version is closed when the board is under the prompt', async ($, on) => {
   mock.clock(on, { now: 1_000 })
   on('ui.render', { component: 'Pane' }, ($, e) => {
@@ -95,6 +101,7 @@ test('a pane left open by an earlier version is closed when the board is under t
   on('session.root', () => ({ value: '/repo' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await until(() => closed !== '')
   expect(closed).toBe('tasks')
 })
 
@@ -112,6 +119,7 @@ test('the plan tool is registered even when the command name is refused', async 
   on('session.root', () => ({ value: '/repo' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await until(() => registered !== '')
   expect(registered).toBe('plan')
 })
 
