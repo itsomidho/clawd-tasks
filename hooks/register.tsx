@@ -81,11 +81,20 @@ async function planned($: EngineInterface, tool: string, args: Record<string, un
   }
 }
 
+// The clawd family's look (shared with clawd-git and clawd-debug): the accent,
+// the frame colour, and chips (dark text on a colour).
+const ACCENT = '#d97757'
+const BORDER = '#5c6370'
+const CHIP_TEXT = '#1e2127'
+const OK = '#98c379'
+const WARN = '#e5c07b'
+const ERR = '#e06c75'
+
 // Marks as clawd-git drew the plan: done, running, waiting.
 const STATUS = {
-  completed: { mark: '✓', color: 'green' },
-  in_progress: { mark: '●', color: 'yellow' },
-  pending: { mark: '○', color: 'gray' },
+  completed: { mark: '✓', color: OK },
+  in_progress: { mark: '●', color: WARN },
+  pending: { mark: '○', color: BORDER },
 } as const
 
 function stepTime(step: Step, at: number) {
@@ -106,17 +115,17 @@ function rows({ Box, Text }: Elements, one: Board, at: number, width: number, li
   const filled = total === 0 ? 0 : Math.round((done / total) * barWidth)
   const out = [
     <Text key="head" wrap="truncate-end">
-      <Text bold>Plan</Text>
+      <Text bold color={ACCENT}>Plan</Text>
       <Text dimColor> · </Text>
-      <Text color={done === total ? 'green' : 'yellow'}>{`${done}/${total} done`}</Text>
+      <Text color={done === total ? OK : WARN}>{`${done}/${total} done`}</Text>
       {took !== '' && <Text dimColor>{` · ${took}`}</Text>}
     </Text>,
     <Text key="bar">
-      <Text color="green">{'━'.repeat(filled)}</Text>
+      <Text color={done === total ? OK : ACCENT}>{'━'.repeat(filled)}</Text>
       <Text dimColor>{'━'.repeat(barWidth - filled)}</Text>
     </Text>,
   ]
-  if (shown.folded > 0) out.push(<Text key="folded" dimColor><Text color="green">✓ </Text>{`${shown.folded} done`}</Text>)
+  if (shown.folded > 0) out.push(<Text key="folded" dimColor><Text color={OK}>✓ </Text>{`${shown.folded} done`}</Text>)
   for (const task of shown.tasks) {
     const status = STATUS[task.status]
     const isRunning = task.id === running?.id
@@ -132,9 +141,9 @@ function rows({ Box, Text }: Elements, one: Board, at: number, width: number, li
             {isRunning ? task.activeForm || task.subject : task.subject}
           </Text>
         </Box>
-        {time !== '' && <Text color={isRunning ? 'yellow' : 'gray'}>{`  ${time}`}</Text>}
-        {files > 0 && <Text color="green">{`  +${added}`}</Text>}
-        {files > 0 && <Text color={removed > 0 ? 'red' : undefined} dimColor={removed === 0}>{` −${removed}`}</Text>}
+        {time !== '' && <Text color={isRunning ? WARN : undefined} dimColor={!isRunning}>{`  ${time}`}</Text>}
+        {files > 0 && <Text color={OK}>{`  +${added}`}</Text>}
+        {files > 0 && <Text color={removed > 0 ? ERR : undefined} dimColor={removed === 0}>{` −${removed}`}</Text>}
         {task.agents > 0 && <Text dimColor>{`  ${task.agents} agent${task.agents > 1 ? 's' : ''}`}</Text>}
       </Box>,
     )
@@ -144,13 +153,13 @@ function rows({ Box, Text }: Elements, one: Board, at: number, width: number, li
       out.push(
         <Box key={`s:${step.id}`} flexDirection="row">
           <Text dimColor>{'  │ '}</Text>
-          <Text color={step.isError ? 'red' : step.endedAt === undefined ? 'yellow' : 'cyan'}>
+          <Text color={step.isError ? ERR : step.endedAt === undefined ? WARN : '#56b6c2'}>
             {shortTool(step.tool).slice(0, TOOL_WIDTH).padEnd(TOOL_WIDTH)}
           </Text>
           <Box flexGrow={1} flexShrink={1}>
             <Text color={step.endedAt === undefined ? undefined : 'gray'} wrap="truncate-end">{` ${label}${step.agentId ? ' (agent)' : ''}`}</Text>
           </Box>
-          <Text color={step.isError ? 'red' : 'gray'}>{`  ${step.isError ? 'failed' : stepTime(step, at)}`}</Text>
+          <Text color={step.isError ? ERR : undefined} dimColor={!step.isError}>{`  ${step.isError ? 'failed' : stepTime(step, at)}`}</Text>
         </Box>,
       )
     }
@@ -296,7 +305,7 @@ export const register: Register = (on, options) => {
     // column, the frame itself stretched across the row (the footer spans the
     // whole terminal while a pane is docked).
     const width = (e.viewport?.columns ?? FALLBACK_COLUMNS) - INDENT - TRAIL
-    const frame = { borderStyle: 'round', borderDimColor: true, paddingX: 1 } as const
+    const frame = { borderStyle: 'round', borderColor: BORDER, paddingX: 1 } as const
     return (
       <Box flexDirection="column">
         {below}
