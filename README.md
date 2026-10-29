@@ -1,14 +1,14 @@
 # clawd-tasks
 
-[![Latest release](https://img.shields.io/github/v/release/itsomidho/clawd-tasks?label=release&color=7fbeb3)](https://github.com/itsomidho/clawd-tasks/releases)
+[![Latest release](https://img.shields.io/github/v/release/itsomidho/clawd-tasks?label=release&color=7fbeb3)](https://github.com/itsomidho/clawd-tasks/releases) [![Wiki](https://img.shields.io/badge/docs-wiki-7fbeb3)](https://github.com/itsomidho/clawd-tasks/wiki)
 
 A task board for [Claude Code](https://claude.com/claude-code). When Claude makes a plan, the board lists its tasks under the prompt and, under the task in progress, the steps Claude takes for it: each tool call, what it worked on, and how long it ran.
 
 With [clawd-statusbar](https://github.com/itsomidho/clawd-statusbar) installed, the board sits right above or below the bar, in a frame of the same width. Each plugin works on its own.
 
-![The task board through one plan: four tasks, each tool call filed under the task in progress, a failed test run, then all four done](docs/board.gif)
+![The task board through one real plan: three tasks, each tool call filed under the task in progress, a failed test run that is retried, then all three done](docs/board.gif)
 
-<sub>One plan, time-lapsed: Claude reads the auth flow with an agent's help, adds an endpoint across three files, writes tests (the first run fails and is fixed), then updates the README. Once every task is done, the board leaves the screen.</sub>
+<sub>One real plan, recorded: Claude reads the cart code, adds applyCoupon, then writes a test; the first test run fails and the second passes. Once every task is done, the board leaves the screen.</sub>
 
 ## What it shows
 
@@ -99,9 +99,20 @@ claude plugin validate .
 claude plugin test .
 ```
 
-`docs/board.gif` is drawn by `python3 docs/board_gif.py docs/board.gif` (Pillow and the DejaVu fonts).
+`docs/board.gif` is a recording of a real session.
 
 To run your working copy instead of the installed one, start Claude Code with `claude --plugin-dir /path/to/clawd-tasks`; edits reload when a turn ends.
+
+## The clawd family
+
+clawd-tasks is one of seven plugins in the [`itsomidho` marketplace](https://github.com/itsomidho/claude-plugins); each works on its own:
+
+- [clawd-statusbar](https://github.com/itsomidho/clawd-statusbar): a framed status bar under the prompt: context, usage limits with reset times, git state, MR/PR pipeline status, and Clawd frying an egg while Claude works
+- [clawd-guard](https://github.com/itsomidho/clawd-guard): a safety net: stops risky shell commands, writes to secret files and leaked keys before they run
+- [clawd-notify](https://github.com/itsomidho/clawd-notify): tells you when Claude is done or needs you: a desktop notification, a chime, and optionally a push to your phone
+- [clawd-git](https://github.com/itsomidho/clawd-git): a live git panel beside the conversation: the file tree, changes, colored diffs and the commit graph; marks what Claude changed, stages, commits and asks Claude to review
+- [clawd-logs](https://github.com/itsomidho/clawd-logs): watches your project's error logs (WordPress debug.log, nginx, any log file): new errors show above the prompt, grouped, with a Fix button, and Claude hears about the ones its own work caused
+- [clawd-debug](https://github.com/itsomidho/clawd-debug): a step debugger beside the conversation: set a breakpoint, let Claude run your code with test data, and step line by line while every variable and line value shows
 
 ## License
 
